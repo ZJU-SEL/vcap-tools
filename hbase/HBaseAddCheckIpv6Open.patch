@@ -1,3 +1,11 @@
+if the OS has foribided the ipv6,then DNS.getIPs[1] will ocurr ArrayIndexOutOfBoundsException
+Error Information:
+    Exception in thread "main" java.lang.RuntimeException: Failed construction of Regionserver: class org.apache.hadoop.hbase.regionserver.HRegionServer
+    Caused by: java.lang.ArrayIndexOutOfBoundsException: 1 
+    the error also ocuur in HMaster.java
+    
+    this patch will make hbase running normally on operating system which close  ipv6
+ 
 diff -Naur /home/laicb/old4/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java /home/laicb/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
 --- /home/laicb/old4/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java	2013-12-29 21:26:46.242598013 +0800
 +++ /home/laicb/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java	2013-12-29 20:45:15.000000000 +0800
