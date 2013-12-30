@@ -1,0 +1,137 @@
+if the OS has foribided the ipv6,then DNS.getIPs[1] will ocurr ArrayIndexOutOfBoundsException
+Error Information:
+    Exception in thread "main" java.lang.RuntimeException: Failed construction of Regionserver: class org.apache.hadoop.hbase.regionserver.HRegionServer
+    Caused by: java.lang.ArrayIndexOutOfBoundsException: 1 
+    the error also ocuur in HMaster.java
+    
+    this patch will make hbase running normally on operating system which close  ipv6
+ 
+diff -Naur /home/laicb/old4/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java /home/laicb/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+--- /home/laicb/old4/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java	2013-12-29 21:26:46.242598013 +0800
++++ /home/laicb/4/src/main/java/org/apache/hadoop/hbase/master/HMaster.java	2013-12-29 20:45:15.000000000 +0800
+@@ -95,6 +95,11 @@
+ import org.apache.zookeeper.KeeperException;
+ import org.apache.zookeeper.Watcher;
+ 
++// use by whetherIpv6Open
++import java.io.BufferedReader;  
++import java.io.IOException;  
++import java.io.InputStreamReader;
++
+ /**
+  * HMaster is the "master server" for HBase. An HBase cluster has one active
+  * master.  If many masters are started, all compete.  Whichever wins goes on to
+@@ -176,6 +181,31 @@
+ 
+   private Thread catalogJanitorChore;
+   private LogCleaner logCleaner;
++  
++
++  /**
++   * input nic as parameter,it's a name of NetworkInterface
++   * function: it check whether Ipv6 is Open
++   * retvalue: return true iff Ipv6 is Open,otherwise return false
++  */
++  public static boolean whetherOpenIpv6(String nic)
++  {
++       boolean retValue = false;
++       try {
++            String cmd = "ifconfig "+nic+" | grep inet6";
++            Process process = Runtime.getRuntime().exec(new String[]{"/bin/sh","-c",cmd});
++            BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()));
++            String line = "";
++            while ((line = input.readLine()) != null) {
++                 retValue = true;
++                 break;
++           }
++            input.close();
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    return retValue;
++  }
+ 
+   /**
+    * Initializes the HMaster. The steps are as follows:
+@@ -231,7 +261,7 @@
+ 
+     this.metrics = new MasterMetrics(getServerName());
+   }
+-
++  
+   /**
+    * Stall startup if we are designated a backup master; i.e. we want someone
+    * else to become the master before proceeding.
+@@ -526,7 +556,12 @@
+     String myPort = c.get(HConstants.MASTER_PORT);
+     String dnsInterface = c.get("hbase.master.dns.interface", "default");
+     if (c.get("hbase.use_ips", "false").equals("true")) {
+-        return DNS.getIPs(dnsInterface)[1] + ":" + myPort;
++        String retValue="";
++        if(whetherOpenIpv6(dnsInterface))
++           retValue = DNS.getIPs(dnsInterface)[1] + ":" + myPort;
++        else
++           retValue = DNS.getIPs(dnsInterface)[0] + ":" + myPort;
++        return retValue;
+     }
+     String s = Strings.domainNamePointerToHostName(DNS.getDefaultHost(
+         dnsInterface, c.get("hbase.master.dns.nameserver", "default")));
+diff -Naur /home/laicb/old4/4/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java /home/laicb/4/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+--- /home/laicb/old4/4/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java	2013-12-29 21:23:35.170588766 +0800
++++ /home/laicb/4/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java	2013-12-29 20:34:53.000000000 +0800
+@@ -138,6 +138,12 @@
+ import com.google.common.base.Function;
+ import com.google.common.collect.Lists;
+ 
++//use by whetherIpv6Open
++import java.io.BufferedReader;  
++import java.io.IOException;  
++import java.io.InputStreamReader;
++
++/*
+ /**
+  * HRegionServer makes a set of HRegions available to clients. It checks in with
+  * the HMaster. There are many HRegionServers in a single HBase deployment.
+@@ -273,7 +279,29 @@
+ 
+   private final Set<byte[]> regionsInTransitionInRS =
+       new ConcurrentSkipListSet<byte[]>(Bytes.BYTES_COMPARATOR);
+-
++  /**
++   * input nic as parameter,it's a name of NetworkInterface
++   * function: it check whether Ipv6 is Open
++   * retvalue: return true iff Ipv6 is Open,otherwise return false
++  */
++  public static boolean whetherOpenIpv6(String nic)
++  {
++       boolean retValue = false;
++       try {  
++            String cmd = "ifconfig "+nic+" | grep inet6";     
++            Process process = Runtime.getRuntime().exec(new String[]{"/bin/sh","-c",cmd});     
++            BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()));  
++            String line = "";  
++            while ((line = input.readLine()) != null) {  
++                 retValue = true;
++                 break;
++	   }  
++            input.close();  
++        } catch (IOException e) {  
++            e.printStackTrace();  
++        }
++    return retValue;  
++  } 
+   /**
+    * Starts a HRegionServer at the default location
+    *
+@@ -325,7 +353,10 @@
+     String dnsInterface = conf.get("hbase.regionserver.dns.interface",
+         "default");
+     if (conf.get("hbase.use_ips", "false").equals("true")) {
+-      machineName = DNS.getIPs(dnsInterface)[1];
++        if(whetherOpenIpv6(dnsInterface))
++           machineName = DNS.getIPs(dnsInterface)[1];
++        else
++           machineName = DNS.getIPs(dnsInterface)[0];
+     } else {
+       machineName = Strings.domainNamePointerToHostName(
+           DNS.getDefaultHost(dnsInterface,
