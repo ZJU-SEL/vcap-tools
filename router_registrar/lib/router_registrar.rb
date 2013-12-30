@@ -3,6 +3,7 @@ $:.unshift(File.expand_path(".", File.dirname(__FILE__)))
 require "rubygems"
 require "bundler/setup"
 
+require "yaml"
 require "eventmachine"
 require "vcap/logging"
 require "cf_message_bus/message_bus"
